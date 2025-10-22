@@ -34,6 +34,8 @@ package ob.components
 
     import ob.commands.SetClientInfoCommand;
     import ob.core.IObjectBuilder;
+    import ob.hotkeys.HotkeyActions;
+    import ob.hotkeys.HotkeyManager;
 
     import otlib.utils.ClientInfo;
 
@@ -76,6 +78,7 @@ package ob.components
         private var m_application:IObjectBuilder;
 
         private var m_communicator:IWorkerCommunicator;
+        private var m_hotkeys:HotkeyManager;
 
         //--------------------------------------
         // Getters / Setters
@@ -94,6 +97,17 @@ package ob.components
             if (m_communicator) {
                 m_communicator.registerCallback(SetClientInfoCommand, clientInfoCallback);
             }
+        }
+
+        public function get hotkeyManager():HotkeyManager { return m_hotkeys; }
+        public function set hotkeyManager(value:HotkeyManager):void
+        {
+            if (m_hotkeys == value)
+                return;
+
+            m_hotkeys = value;
+
+            bindHotkeys();
         }
 
         //--------------------------------------------------------------------------
@@ -129,6 +143,8 @@ package ob.components
                 instance == openLogWindowButton)
             {
                 Button(instance).addEventListener(MouseEvent.CLICK, buttonClickHandler);
+                if (m_hotkeys)
+                    bindButtonHotkey(Button(instance));
             }
         }
 
@@ -142,6 +158,73 @@ package ob.components
             compileButton.enabled = (m_application.clientChanged && !m_application.clientIsTemporary);
             compileAsButton.enabled = m_application.clientLoaded;
             assetStoreButton.enabled = info.loaded;
+        }
+
+        private function bindHotkeys():void
+        {
+            if (!m_hotkeys)
+                return;
+
+            if (newButton)
+                m_hotkeys.bindTooltip(newButton, HotkeyActions.FILE_NEW);
+            if (openButton)
+                m_hotkeys.bindTooltip(openButton, HotkeyActions.FILE_OPEN);
+            if (compileButton)
+                m_hotkeys.bindTooltip(compileButton, HotkeyActions.FILE_COMPILE);
+            if (compileAsButton)
+                m_hotkeys.bindTooltip(compileAsButton, HotkeyActions.FILE_COMPILE_AS);
+            if (openFindWindowButton)
+                m_hotkeys.bindTooltip(openFindWindowButton, HotkeyActions.TOOLS_FIND);
+            if (openObjectViewerButton)
+                m_hotkeys.bindTooltip(openObjectViewerButton, HotkeyActions.TOOLS_OBJECT_VIEWER);
+            if (openSlicerButton)
+                m_hotkeys.bindTooltip(openSlicerButton, HotkeyActions.TOOLS_SLICER);
+            if (openAnimationEditorButton)
+                m_hotkeys.bindTooltip(openAnimationEditorButton, HotkeyActions.TOOLS_ANIMATION_EDITOR);
+            if (assetStoreButton)
+                m_hotkeys.bindTooltip(assetStoreButton, HotkeyActions.ASSET_STORE);
+            if (openLogWindowButton)
+                m_hotkeys.bindTooltip(openLogWindowButton, HotkeyActions.WINDOW_LOG);
+        }
+
+        private function bindButtonHotkey(button:Button):void
+        {
+            if (!button || !m_hotkeys)
+                return;
+
+            switch (button)
+            {
+                case newButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.FILE_NEW);
+                    break;
+                case openButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.FILE_OPEN);
+                    break;
+                case compileButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.FILE_COMPILE);
+                    break;
+                case compileAsButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.FILE_COMPILE_AS);
+                    break;
+                case openFindWindowButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.TOOLS_FIND);
+                    break;
+                case openObjectViewerButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.TOOLS_OBJECT_VIEWER);
+                    break;
+                case openSlicerButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.TOOLS_SLICER);
+                    break;
+                case openAnimationEditorButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.TOOLS_ANIMATION_EDITOR);
+                    break;
+                case assetStoreButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.ASSET_STORE);
+                    break;
+                case openLogWindowButton:
+                    m_hotkeys.bindTooltip(button, HotkeyActions.WINDOW_LOG);
+                    break;
+            }
         }
 
         //--------------------------------------

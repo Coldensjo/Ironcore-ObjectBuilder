@@ -77,6 +77,7 @@ package ob.settings
         public var itemsDuration:Number = 500;
         public var outfitsDuration:Number = 300;
         public var effectsDuration:Number = 100;
+        public var hotkeysConfig:String = "";
 
         //--------------------------------------------------------------------------
         // CONSTRUCTOR

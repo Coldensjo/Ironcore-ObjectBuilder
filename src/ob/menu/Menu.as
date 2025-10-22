@@ -22,8 +22,7 @@
 
 package ob.menu
 {
-    import flash.events.KeyboardEvent;
-    import flash.ui.Keyboard;
+    import flash.utils.Dictionary;
 
     import mx.controls.FlexNativeMenu;
     import mx.core.FlexGlobals;
@@ -36,6 +35,9 @@ package ob.menu
     import nail.utils.Descriptor;
 
     import ob.core.IObjectBuilder;
+    import ob.events.HotkeyManagerEvent;
+    import ob.hotkeys.Hotkey;
+    import ob.hotkeys.HotkeyManager;
 
     import otlib.resources.Resources;
 
@@ -50,6 +52,8 @@ package ob.menu
 
         private var m_application:IObjectBuilder;
         private var m_isMac:Boolean;
+        private var m_hotkeys:HotkeyManager;
+        private var m_actionItems:Dictionary = new Dictionary();
 
         //--------------------------------------------------------------------------
         // CONSTRUCTOR
@@ -74,6 +78,22 @@ package ob.menu
         //--------------------------------------------------------------------------
         // METHODS
         //--------------------------------------------------------------------------
+
+        public function set hotkeyManager(value:HotkeyManager):void
+        {
+            if (m_hotkeys == value)
+                return;
+
+            if (m_hotkeys)
+                m_hotkeys.removeEventListener(HotkeyManagerEvent.HOTKEY_CHANGED, hotkeyChangedHandler);
+
+            m_hotkeys = value;
+
+            if (m_hotkeys)
+                m_hotkeys.addEventListener(HotkeyManagerEvent.HOTKEY_CHANGED, hotkeyChangedHandler, false, 0, true);
+
+            refreshMenuHotkeys();
+        }
 
         //--------------------------------------
         // Private
@@ -103,34 +123,29 @@ package ob.menu
             var fileNewMenu:MenuItem = new MenuItem();
             fileNewMenu.label = Resources.getString("menu.new");
             fileNewMenu.data = FILE_NEW;
-            fileNewMenu.keyEquivalent = "N";
-            fileNewMenu.controlKey = true;
             fileMenu.addMenuItem(fileNewMenu);
+            registerMenuItem(FILE_NEW, fileNewMenu);
 
             // File > Open
             var fileOpenMenu:MenuItem = new MenuItem();
             fileOpenMenu.label = Resources.getString("menu.open");
             fileOpenMenu.data = FILE_OPEN;
-            fileOpenMenu.keyEquivalent = "O";
-            fileOpenMenu.controlKey = true;
             fileMenu.addMenuItem(fileOpenMenu);
+            registerMenuItem(FILE_OPEN, fileOpenMenu);
 
             // File > Compile
             var fileCompileMenu:MenuItem = new MenuItem();
             fileCompileMenu.label = Resources.getString("menu.compile");
             fileCompileMenu.data = FILE_COMPILE;
-            fileCompileMenu.keyEquivalent = "S";
-            fileCompileMenu.controlKey = true;
             fileMenu.addMenuItem(fileCompileMenu);
+            registerMenuItem(FILE_COMPILE, fileCompileMenu);
 
             // File > Compile As
             var fileCompileAsMenu:MenuItem = new MenuItem();
             fileCompileAsMenu.label = Resources.getString("menu.compileAs");
             fileCompileAsMenu.data = FILE_COMPILE_AS;
-            fileCompileAsMenu.keyEquivalent = "S";
-            fileCompileAsMenu.controlKey = true;
-            fileCompileAsMenu.shiftKey = true;
             fileMenu.addMenuItem(fileCompileAsMenu);
+            registerMenuItem(FILE_COMPILE_AS, fileCompileAsMenu);
 
             // Separator
             fileMenu.addMenuItem(separator);
@@ -139,9 +154,8 @@ package ob.menu
             var fileCloseMenu:MenuItem = new MenuItem();
             fileCloseMenu.label = Resources.getString("menu.close");
             fileCloseMenu.data = FILE_CLOSE;
-            fileCloseMenu.keyEquivalent = "W";
-            fileCloseMenu.controlKey = true;
             fileMenu.addMenuItem(fileCloseMenu);
+            registerMenuItem(FILE_CLOSE, fileCloseMenu);
 
             // Separator
             fileMenu.addMenuItem(separator);
@@ -150,9 +164,8 @@ package ob.menu
             var fileMergeMenu:MenuItem = new MenuItem();
             fileMergeMenu.label = Resources.getString("menu.merge");
             fileMergeMenu.data = FILE_MERGE;
-            fileMergeMenu.keyEquivalent = "M";
-            fileMergeMenu.controlKey = true;
             fileMenu.addMenuItem(fileMergeMenu);
+            registerMenuItem(FILE_MERGE, fileMergeMenu);
 
             // Separator
             if (!m_isMac)
@@ -162,15 +175,13 @@ package ob.menu
             var filePreferencesMenu:MenuItem = new MenuItem();
             filePreferencesMenu.label = Resources.getString("menu.preferences");
             filePreferencesMenu.data = FILE_PREFERENCES;
-            filePreferencesMenu.keyEquivalent = "P";
-            filePreferencesMenu.controlKey = true;
+            registerMenuItem(FILE_PREFERENCES, filePreferencesMenu);
 
             // File > Exit
             var fileExitMenu:MenuItem = new MenuItem();
             fileExitMenu.label = Resources.getString("menu.exit");
             fileExitMenu.data = FILE_EXIT;
-            fileExitMenu.keyEquivalent = "Q";
-            fileExitMenu.controlKey = true;
+            registerMenuItem(FILE_EXIT, fileExitMenu);
 
             // View
             var viewMenu:MenuItem = new MenuItem();
@@ -181,25 +192,25 @@ package ob.menu
             var viewShowPreviewMenu:MenuItem = new MenuItem();
             viewShowPreviewMenu.label = Resources.getString("menu.showPreviewPanel");
             viewShowPreviewMenu.data = VIEW_SHOW_PREVIEW;
-            viewShowPreviewMenu.keyEquivalent = "F2";
             viewShowPreviewMenu.toggled = m_application.showPreviewPanel;
             viewMenu.addMenuItem(viewShowPreviewMenu);
+            registerMenuItem(VIEW_SHOW_PREVIEW, viewShowPreviewMenu);
 
             // View > Show Objects Panel
             var viewShowObjectsMenu:MenuItem = new MenuItem();
             viewShowObjectsMenu.label = Resources.getString("menu.showObjectsPanel");
             viewShowObjectsMenu.data = VIEW_SHOW_OBJECTS;
-            viewShowObjectsMenu.keyEquivalent = "F3";
             viewShowObjectsMenu.toggled = m_application.showThingsPanel;
             viewMenu.addMenuItem(viewShowObjectsMenu);
+            registerMenuItem(VIEW_SHOW_OBJECTS, viewShowObjectsMenu);
 
             // View > Show Sprites Panel
             var viewShowSpritesMenu:MenuItem = new MenuItem();
             viewShowSpritesMenu.label = Resources.getString("menu.showSpritesPanel");
             viewShowSpritesMenu.data = VIEW_SHOW_SPRITES;
-            viewShowSpritesMenu.keyEquivalent = "F4";
             viewShowSpritesMenu.toggled = m_application.showSpritesPanel;
             viewMenu.addMenuItem(viewShowSpritesMenu);
+            registerMenuItem(VIEW_SHOW_SPRITES, viewShowSpritesMenu);
 
             // Tools
             var toolsMenu:MenuItem = new MenuItem();
@@ -210,51 +221,57 @@ package ob.menu
             var toolsFind:MenuItem = new MenuItem();
             toolsFind.label = Resources.getString("find");
             toolsFind.data = TOOLS_FIND;
-            toolsFind.keyEquivalent = "F";
-            toolsFind.controlKey = true;
             toolsMenu.addMenuItem(toolsFind);
+            registerMenuItem(TOOLS_FIND, toolsFind);
 
             // Tools > LookType Generator
             var toolsLookGenerator:MenuItem = new MenuItem();
             toolsLookGenerator.label = Resources.getString("menu.toolsLookTypeGenerator");
             toolsLookGenerator.data = TOOLS_LOOK_TYPE_GENERATOR;
             toolsMenu.addMenuItem(toolsLookGenerator);
+            registerMenuItem(TOOLS_LOOK_TYPE_GENERATOR, toolsLookGenerator);
 
             // Tools > Object Viewer
             var toolsObjectViewer:MenuItem = new MenuItem();
             toolsObjectViewer.label = Resources.getString("objectViewer");
             toolsObjectViewer.data = TOOLS_OBJECT_VIEWER;
             toolsMenu.addMenuItem(toolsObjectViewer);
+            registerMenuItem(TOOLS_OBJECT_VIEWER, toolsObjectViewer);
 
             // Tools > Slicer
             var toolsSlicer:MenuItem = new MenuItem();
             toolsSlicer.label = "Slicer";
             toolsSlicer.data = TOOLS_SLICER;
             toolsMenu.addMenuItem(toolsSlicer);
+            registerMenuItem(TOOLS_SLICER, toolsSlicer);
 
             // Tools > Animation Editor
             var toolsAnimationEditor:MenuItem = new MenuItem();
             toolsAnimationEditor.label = Resources.getString("animationEditor");
             toolsAnimationEditor.data = TOOLS_ANIMATION_EDITOR;
             toolsMenu.addMenuItem(toolsAnimationEditor);
+            registerMenuItem(TOOLS_ANIMATION_EDITOR, toolsAnimationEditor);
 
             // Tools > Sprites Optimizer
             var toolsSpritesOptimizer:MenuItem = new MenuItem();
             toolsSpritesOptimizer.label = Resources.getString("spritesOptimizer");
             toolsSpritesOptimizer.data = TOOLS_SPRITES_OPTIMIZER;
             toolsMenu.addMenuItem(toolsSpritesOptimizer);
+            registerMenuItem(TOOLS_SPRITES_OPTIMIZER, toolsSpritesOptimizer);
 
             // Tools > Frame Durations Optimizer
             var toolsFrameDurationsOptimizer:MenuItem = new MenuItem();
             toolsFrameDurationsOptimizer.label = Resources.getString("frameDurationsOptimizer");
             toolsFrameDurationsOptimizer.data = TOOLS_FRAME_DURATIONS_OPTIMIZER;
             toolsMenu.addMenuItem(toolsFrameDurationsOptimizer);
+            registerMenuItem(TOOLS_FRAME_DURATIONS_OPTIMIZER, toolsFrameDurationsOptimizer);
 
             // Tools > Frame Groups Converter
             var toolsFrameGroupsConverter:MenuItem = new MenuItem();
             toolsFrameGroupsConverter.label = Resources.getString("frameGroupsConverter");
             toolsFrameGroupsConverter.data = TOOLS_FRAME_GROUPS_CONVERTER;
             toolsMenu.addMenuItem(toolsFrameGroupsConverter);
+            registerMenuItem(TOOLS_FRAME_GROUPS_CONVERTER, toolsFrameGroupsConverter);
 
             // Window
             var windowMenu:MenuItem = new MenuItem();
@@ -265,15 +282,15 @@ package ob.menu
             var windowLogWindowMenu:MenuItem = new MenuItem();
             windowLogWindowMenu.label = Resources.getString("menu.logWindow");
             windowLogWindowMenu.data = WINDOW_LOG;
-            windowLogWindowMenu.keyEquivalent = "L";
-            windowLogWindowMenu.controlKey = true;
             windowMenu.addMenuItem(windowLogWindowMenu);
+            registerMenuItem(WINDOW_LOG, windowLogWindowMenu);
 
             // Window > Versions
             var windowVersionsMenu:MenuItem = new MenuItem();
             windowVersionsMenu.label = Resources.getString("menu.versions");
             windowVersionsMenu.data = WINDOW_VERSIONS;
             windowMenu.addMenuItem(windowVersionsMenu);
+            registerMenuItem(WINDOW_VERSIONS, windowVersionsMenu);
 
             // Help
             var helpMenu:MenuItem = new MenuItem();
@@ -284,9 +301,9 @@ package ob.menu
             var helpContentsMenu:MenuItem = new MenuItem();
             helpContentsMenu.label = Resources.getString("menu.helpContents");
             helpContentsMenu.data = HELP_CONTENTS;
-            helpContentsMenu.keyEquivalent = "F1";
             helpContentsMenu.enabled = false;
             helpMenu.addMenuItem(helpContentsMenu);
+            registerMenuItem(HELP_CONTENTS, helpContentsMenu);
 
             // Separator
             helpMenu.addMenuItem(separator);
@@ -296,11 +313,13 @@ package ob.menu
             helpCheckForUpdatesMenu.label = Resources.getString("menu.checkForUpdate");
             helpCheckForUpdatesMenu.data = HELP_CHECK_FOR_UPDATES;
             helpMenu.addMenuItem(helpCheckForUpdatesMenu);
+            registerMenuItem(HELP_CHECK_FOR_UPDATES, helpCheckForUpdatesMenu);
 
             // About
             var aboutMenu:MenuItem = new MenuItem();
             aboutMenu.label = Resources.getString("menu.about") + " " + Descriptor.getName();
             aboutMenu.data = HELP_ABOUT;
+            registerMenuItem(HELP_ABOUT, aboutMenu);
 
             if (m_isMac)
             {
@@ -330,7 +349,6 @@ package ob.menu
         protected function applicationCompleteHandler(event:FlexEvent):void
         {
             m_application.removeEventListener(FlexEvent.APPLICATION_COMPLETE, applicationCompleteHandler);
-            m_application.systemManager.stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler);
             create();
         }
 
@@ -398,84 +416,55 @@ package ob.menu
             }
         }
 
-        protected function keyDownHandler(event:KeyboardEvent):void
+        private function registerMenuItem(actionId:String, item:MenuItem):void
         {
-            var ev:MenuEvent;
-            var code:uint = event.keyCode;
+            if (!item)
+                return;
 
-            if (m_isMac)
+            if (actionId)
+                m_actionItems[actionId] = item;
+
+            applyMenuHotkey(actionId, item);
+        }
+
+        private function applyMenuHotkey(actionId:String, item:MenuItem = null):void
+        {
+            if (!item && actionId)
+                item = m_actionItems[actionId];
+
+            if (!item)
+                return;
+
+            var hotkey:Hotkey = (m_hotkeys && actionId) ? m_hotkeys.getHotkey(actionId) : null;
+
+            if (hotkey)
             {
-                if (event.ctrlKey && !event.shiftKey)
-                {
-                    switch (code)
-                    {
-                        case Keyboard.N:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_NEW);
-                            break;
-
-                        case Keyboard.O:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_OPEN);
-                            break;
-
-                        case Keyboard.S:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_COMPILE);
-                            break;
-
-                        case Keyboard.M:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_MERGE);
-                            break;
-
-                        case Keyboard.P:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_PREFERENCES);
-                            break;
-
-                        case Keyboard.F:
-                            ev = new MenuEvent(MenuEvent.SELECTED, TOOLS_FIND);
-                            break;
-
-                        case Keyboard.Q:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_EXIT);
-                            break;
-
-                        case Keyboard.L:
-                            ev = new MenuEvent(MenuEvent.SELECTED, WINDOW_LOG);
-                            break;
-                    }
-                }
-                else if (event.ctrlKey && event.shiftKey)
-                {
-                    switch (code)
-                    {
-                        case Keyboard.S:
-                            ev = new MenuEvent(MenuEvent.SELECTED, FILE_COMPILE_AS);
-                            break;
-                    }
-                }
+                item.keyEquivalent = hotkey.keyLabel;
+                item.controlKey = hotkey.ctrl;
+                item.shiftKey = hotkey.shift;
+                item.altKey = hotkey.alt;
             }
-            else if (!event.ctrlKey && !event.shiftKey)
+            else
             {
-                switch (code)
-                {
-                    case Keyboard.F1:
-                        ev = new MenuEvent(MenuEvent.SELECTED, HELP_CONTENTS);
-                        break;
-
-                    case Keyboard.F2:
-                        ev = new MenuEvent(MenuEvent.SELECTED, VIEW_SHOW_PREVIEW);
-                        break;
-
-                    case Keyboard.F3:
-                        ev = new MenuEvent(MenuEvent.SELECTED, VIEW_SHOW_OBJECTS);
-                        break;
-
-                    case Keyboard.F4:
-                        ev = new MenuEvent(MenuEvent.SELECTED, VIEW_SHOW_SPRITES);
-                        break;
-                }
+                item.keyEquivalent = "";
+                item.controlKey = false;
+                item.shiftKey = false;
+                item.altKey = false;
             }
+        }
 
-            if (ev)
-                dispatchEvent(ev);
+        private function refreshMenuHotkeys():void
+        {
+            for (var key:String in m_actionItems)
+            {
+                applyMenuHotkey(key);
+            }
+        }
+
+        protected function hotkeyChangedHandler(event:HotkeyManagerEvent):void
+        {
+            if (event.actionId)
+                applyMenuHotkey(event.actionId);
         }
 
         //--------------------------------------------------------------------------

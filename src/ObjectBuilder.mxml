@@ -58,6 +58,7 @@ THE SOFTWARE.
 
             import flash.net.registerClassAlias;
             import flash.utils.Dictionary;
+            import flash.ui.Keyboard;
 
             import mx.core.UIComponent;
             import mx.events.CloseEvent;
@@ -136,6 +137,9 @@ THE SOFTWARE.
             import ob.components.SpritesOptimizerWindow;
             import ob.components.FrameDurationsOptimizerWindow;
             import ob.components.FrameGroupsConverterWindow;
+            import ob.hotkeys.Hotkey;
+            import ob.hotkeys.HotkeyActions;
+            import ob.hotkeys.HotkeyManager;
             import ob.settings.ObjectBuilderSettings;
             import ob.utils.ObUtils;
 
@@ -198,6 +202,7 @@ THE SOFTWARE.
             private var _splashScreen:SplashScreen;
             private var _settingsManager:ISettingsManager;
             private var _settings:ObjectBuilderSettings;
+            private var _hotkeyManager:HotkeyManager;
             private var _updater:ApplicationUpdaterUI = new ApplicationUpdaterUI();
             private var _versionStorage:IVersionStorage;
             private var _spriteDimensionStorage:ISpriteDimensionStorage;
@@ -519,8 +524,17 @@ THE SOFTWARE.
 
                 _locked = true;
 
+                var hotkeyBackup:String = null;
+                if (_hotkeyManager)
+                {
+                    var backupSettings:ObjectBuilderSettings = new ObjectBuilderSettings();
+                    _hotkeyManager.persist(backupSettings);
+                    hotkeyBackup = backupSettings.hotkeysConfig;
+                }
+
                 var window:PreferencesWindow = new PreferencesWindow();
                 window.settings = _settings;
+                window.hotkeyManager = _hotkeyManager;
                 window.addEventListener(Event.CLOSE, closeHandler);
                 window.open(this);
 
@@ -533,7 +547,17 @@ THE SOFTWARE.
                         thingStepper.amount = _settings.objectsListAmount;
                         spriteStepper.amount = _settings.spritesListAmount;
 
+                        if (_hotkeyManager)
+                            _hotkeyManager.persist(_settings);
+
                         sendCommand(new SettingsCommand(_settings));
+                    }
+                    else if (_hotkeyManager && hotkeyBackup !== null)
+                    {
+                        var restoreSettings:ObjectBuilderSettings = new ObjectBuilderSettings();
+                        restoreSettings.hotkeysConfig = hotkeyBackup;
+                        _hotkeyManager.load(restoreSettings);
+                        bindHotkeysToButtons();
                     }
                 }
             }
@@ -1106,6 +1130,9 @@ THE SOFTWARE.
 
             private function saveSettings():void
             {
+                if (_hotkeyManager)
+                    _hotkeyManager.persist(_settings);
+
                 _settings.maximized = (nativeWindow.displayState == NativeWindowDisplayState.MAXIMIZED);
                 _settingsManager.saveSettings(_settings);
             }
@@ -1133,6 +1160,334 @@ THE SOFTWARE.
                 _spriteDimensionStorage.load(file);
 
                 sendCommand(new LoadSpriteDimensionsCommand(file));
+            }
+
+            private function getString(key:String, defaultValue:String = null):String
+            {
+                var value:String = resourceManager.getString("strings", key);
+                if (value == null || value.length == 0)
+                    return defaultValue != null ? defaultValue : key;
+                return value;
+            }
+
+            private function initializeHotkeys():void
+            {
+                if (_hotkeyManager)
+                    _hotkeyManager.dispose();
+
+                _hotkeyManager = new HotkeyManager(systemManager.stage);
+
+                registerHotkeyDefinitions();
+                _hotkeyManager.load(_settings);
+                registerHotkeyHandlers();
+                bindHotkeysToButtons();
+
+                nativeMenu.hotkeyManager = _hotkeyManager;
+                toobar.hotkeyManager = _hotkeyManager;
+            }
+
+            private function registerHotkeyDefinitions():void
+            {
+                var fileCategory:String = getString("menu.file");
+                var viewCategory:String = getString("menu.view");
+                var toolsCategory:String = getString("menu.tools");
+                var windowCategory:String = getString("menu.window");
+                var helpCategory:String = getString("menu.help");
+                var thingsCategory:String = getString("things");
+                var spritesCategory:String = getString("sprites");
+
+                _hotkeyManager.registerAction(HotkeyActions.FILE_NEW, getString("menu.new"), fileCategory, Hotkey.fromKeyCode(Keyboard.N, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_OPEN, getString("menu.open"), fileCategory, Hotkey.fromKeyCode(Keyboard.O, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_COMPILE, getString("menu.compile"), fileCategory, Hotkey.fromKeyCode(Keyboard.S, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_COMPILE_AS, getString("menu.compileAs"), fileCategory, Hotkey.fromKeyCode(Keyboard.S, true, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_CLOSE, getString("menu.close"), fileCategory, Hotkey.fromKeyCode(Keyboard.W, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_MERGE, getString("menu.merge"), fileCategory, Hotkey.fromKeyCode(Keyboard.M, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_PREFERENCES, getString("menu.preferences"), fileCategory, Hotkey.fromKeyCode(Keyboard.P, true));
+                _hotkeyManager.registerAction(HotkeyActions.FILE_EXIT, getString("menu.exit"), fileCategory, Hotkey.fromKeyCode(Keyboard.Q, true));
+
+                _hotkeyManager.registerAction(HotkeyActions.VIEW_SHOW_PREVIEW, getString("menu.showPreviewPanel"), viewCategory, Hotkey.fromKeyCode(Keyboard.F2));
+                _hotkeyManager.registerAction(HotkeyActions.VIEW_SHOW_OBJECTS, getString("menu.showObjectsPanel"), viewCategory, Hotkey.fromKeyCode(Keyboard.F3));
+                _hotkeyManager.registerAction(HotkeyActions.VIEW_SHOW_SPRITES, getString("menu.showSpritesPanel"), viewCategory, Hotkey.fromKeyCode(Keyboard.F4));
+
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_FIND, getString("find"), toolsCategory, Hotkey.fromKeyCode(Keyboard.F, true));
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_LOOK_TYPE_GENERATOR, getString("menu.toolsLookTypeGenerator"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_OBJECT_VIEWER, getString("objectViewer"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_SLICER, getString("slicer", "Slicer"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_ANIMATION_EDITOR, getString("animationEditor"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_SPRITES_OPTIMIZER, getString("spritesOptimizer"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_FRAME_DURATIONS_OPTIMIZER, getString("frameDurationsOptimizer"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.TOOLS_FRAME_GROUPS_CONVERTER, getString("frameGroupsConverter"), toolsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.ASSET_STORE, getString("assetStore", "Asset Store"), toolsCategory);
+
+                _hotkeyManager.registerAction(HotkeyActions.WINDOW_LOG, getString("menu.logWindow"), windowCategory, Hotkey.fromKeyCode(Keyboard.L, true));
+                _hotkeyManager.registerAction(HotkeyActions.WINDOW_VERSIONS, getString("menu.versions"), windowCategory);
+
+                _hotkeyManager.registerAction(HotkeyActions.HELP_CONTENTS, getString("menu.helpContents"), helpCategory);
+                _hotkeyManager.registerAction(HotkeyActions.HELP_CHECK_FOR_UPDATES, getString("menu.checkForUpdate"), helpCategory);
+                _hotkeyManager.registerAction(HotkeyActions.HELP_ABOUT, getString("menu.about"), helpCategory);
+
+                _hotkeyManager.registerAction(HotkeyActions.THING_REPLACE, getString("replace"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_IMPORT, getString("import"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_EXPORT, getString("export"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_EDIT, getString("edit"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_DUPLICATE, getString("duplicate"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_NEW, getString("new"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_REMOVE, getString("remove"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_CONFIRM, getString("save"), thingsCategory);
+                _hotkeyManager.registerAction(HotkeyActions.THING_CANCEL, getString("close"), thingsCategory);
+
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_REPLACE, getString("replace"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_IMPORT, getString("import"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_EXPORT, getString("export"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_COPY, getString("copy"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_PASTE, getString("paste"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_NEW, getString("new"), spritesCategory);
+                _hotkeyManager.registerAction(HotkeyActions.SPRITE_REMOVE, getString("remove"), spritesCategory);
+            }
+
+            private function registerHotkeyHandlers():void
+            {
+                _hotkeyManager.addHandler(HotkeyActions.FILE_NEW, createNewProject);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_OPEN, openProject);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_COMPILE, compileProject);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_COMPILE_AS, compileProjectAs);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_CLOSE, unloadProject);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_MERGE, mergeProject);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_PREFERENCES, openPreferencesWindow);
+                _hotkeyManager.addHandler(HotkeyActions.FILE_EXIT, close);
+
+                _hotkeyManager.addHandler(HotkeyActions.VIEW_SHOW_PREVIEW, togglePreviewPanelHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.VIEW_SHOW_OBJECTS, toggleThingsPanelHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.VIEW_SHOW_SPRITES, toggleSpritesPanelHotkey);
+
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_FIND, openFinder);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_LOOK_TYPE_GENERATOR, openLookGenerator);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_OBJECT_VIEWER, openObjectViewer);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_SLICER, openSlicer);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_ANIMATION_EDITOR, openAnimationEditor);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_SPRITES_OPTIMIZER, openSpritesOptimizer);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_FRAME_DURATIONS_OPTIMIZER, openFrameDurationsOptimizer);
+                _hotkeyManager.addHandler(HotkeyActions.TOOLS_FRAME_GROUPS_CONVERTER, openFrameGroupsConverter);
+                _hotkeyManager.addHandler(HotkeyActions.ASSET_STORE, openAssetStore);
+
+                _hotkeyManager.addHandler(HotkeyActions.WINDOW_LOG, openLogWindow);
+                _hotkeyManager.addHandler(HotkeyActions.WINDOW_VERSIONS, openVersionsWindow);
+
+                _hotkeyManager.addHandler(HotkeyActions.HELP_CHECK_FOR_UPDATES, checkForUpdates);
+                _hotkeyManager.addHandler(HotkeyActions.HELP_ABOUT, onAboutApplication);
+
+                _hotkeyManager.addHandler(HotkeyActions.THING_REPLACE, replaceThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_IMPORT, importThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_EXPORT, exportThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_EDIT, editThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_DUPLICATE, duplicateThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_NEW, newThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_REMOVE, removeThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_CONFIRM, confirmThingHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.THING_CANCEL, cancelThingHotkey);
+
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_REPLACE, replaceSpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_IMPORT, importSpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_EXPORT, exportSpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_COPY, copySpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_PASTE, pasteSpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_NEW, newSpriteHotkey);
+                _hotkeyManager.addHandler(HotkeyActions.SPRITE_REMOVE, removeSpriteHotkey);
+            }
+
+            private function bindHotkeysToButtons():void
+            {
+                if (!_hotkeyManager)
+                    return;
+
+                if (showThingsPanelButton)
+                    _hotkeyManager.bindTooltip(showThingsPanelButton, HotkeyActions.VIEW_SHOW_OBJECTS);
+
+                if (replaceThingButton)
+                    _hotkeyManager.bindTooltip(replaceThingButton, HotkeyActions.THING_REPLACE);
+                if (importThingButton)
+                    _hotkeyManager.bindTooltip(importThingButton, HotkeyActions.THING_IMPORT);
+                if (exportThingButton)
+                    _hotkeyManager.bindTooltip(exportThingButton, HotkeyActions.THING_EXPORT);
+                if (editThingButton)
+                    _hotkeyManager.bindTooltip(editThingButton, HotkeyActions.THING_EDIT);
+                if (duplicateThingButton)
+                    _hotkeyManager.bindTooltip(duplicateThingButton, HotkeyActions.THING_DUPLICATE);
+                if (newThingButton)
+                    _hotkeyManager.bindTooltip(newThingButton, HotkeyActions.THING_NEW);
+                if (removeThingButton)
+                    _hotkeyManager.bindTooltip(removeThingButton, HotkeyActions.THING_REMOVE);
+                if (confirmButton)
+                    _hotkeyManager.bindTooltip(confirmButton, HotkeyActions.THING_CONFIRM, getString("save"));
+                if (cancelButton)
+                    _hotkeyManager.bindTooltip(cancelButton, HotkeyActions.THING_CANCEL, getString("close"));
+
+                if (replaceSpriteButton)
+                    _hotkeyManager.bindTooltip(replaceSpriteButton, HotkeyActions.SPRITE_REPLACE);
+                if (importSpriteButton)
+                    _hotkeyManager.bindTooltip(importSpriteButton, HotkeyActions.SPRITE_IMPORT);
+                if (exportSpriteButton)
+                    _hotkeyManager.bindTooltip(exportSpriteButton, HotkeyActions.SPRITE_EXPORT);
+                if (copySpriteButton)
+                    _hotkeyManager.bindTooltip(copySpriteButton, HotkeyActions.SPRITE_COPY);
+                if (pasteSpriteButton)
+                    _hotkeyManager.bindTooltip(pasteSpriteButton, HotkeyActions.SPRITE_PASTE);
+                if (newSpriteButton)
+                    _hotkeyManager.bindTooltip(newSpriteButton, HotkeyActions.SPRITE_NEW);
+                if (removeSpriteButton)
+                    _hotkeyManager.bindTooltip(removeSpriteButton, HotkeyActions.SPRITE_REMOVE);
+            }
+
+            private function togglePreviewPanelHotkey():void
+            {
+                if (_locked)
+                    return;
+
+                showPreviewPanel = !showPreviewPanel;
+            }
+
+            private function toggleThingsPanelHotkey():void
+            {
+                if (_locked)
+                    return;
+
+                showThingsPanel = !showThingsPanel;
+            }
+
+            private function toggleSpritesPanelHotkey():void
+            {
+                if (_locked)
+                    return;
+
+                showSpritesPanel = !showSpritesPanel;
+            }
+
+            private function replaceThingHotkey():void
+            {
+                if (!replaceThingButton.enabled)
+                    return;
+
+                replaceThingHandler(null);
+            }
+
+            private function importThingHotkey():void
+            {
+                if (!importThingButton.enabled)
+                    return;
+
+                importThingHandler(null);
+            }
+
+            private function exportThingHotkey():void
+            {
+                if (!exportThingButton.enabled)
+                    return;
+
+                exportThingHandler(null);
+            }
+
+            private function editThingHotkey():void
+            {
+                if (!editThingButton.enabled)
+                    return;
+
+                editThingHandler(null);
+            }
+
+            private function duplicateThingHotkey():void
+            {
+                if (!duplicateThingButton.enabled)
+                    return;
+
+                duplicateThingHandler(null);
+            }
+
+            private function newThingHotkey():void
+            {
+                if (!newThingButton.enabled)
+                    return;
+
+                newThingHandler(null);
+            }
+
+            private function removeThingHotkey():void
+            {
+                if (!removeThingButton.enabled)
+                    return;
+
+                removeThingHandler(null);
+            }
+
+            private function confirmThingHotkey():void
+            {
+                if (!confirmButton.enabled)
+                    return;
+
+                confirmButtonClickHandler(null);
+            }
+
+            private function cancelThingHotkey():void
+            {
+                if (!cancelButton.enabled)
+                    return;
+
+                cancelButtonClickHandler(null);
+            }
+
+            private function replaceSpriteHotkey():void
+            {
+                if (!replaceSpriteButton.enabled)
+                    return;
+
+                replaceSpriteHandler(null);
+            }
+
+            private function importSpriteHotkey():void
+            {
+                if (!importSpriteButton.enabled)
+                    return;
+
+                importSpriteHandler(null);
+            }
+
+            private function exportSpriteHotkey():void
+            {
+                if (!exportSpriteButton.enabled)
+                    return;
+
+                exportSpriteHandler(null);
+            }
+
+            private function copySpriteHotkey():void
+            {
+                if (!copySpriteButton.enabled)
+                    return;
+
+                onCopySprite();
+            }
+
+            private function pasteSpriteHotkey():void
+            {
+                if (!pasteSpriteButton.enabled)
+                    return;
+
+                onPasteSprite();
+            }
+
+            private function newSpriteHotkey():void
+            {
+                if (!newSpriteButton.enabled)
+                    return;
+
+                newSpriteButtonClickHandler(null);
+            }
+
+            private function removeSpriteHotkey():void
+            {
+                if (!removeSpriteButton.enabled)
+                    return;
+
+                removeSpriteHandler(null);
             }
 
             private function firstRun():void
@@ -1664,6 +2019,7 @@ THE SOFTWARE.
                 loadSettings();
                 loadVersions();
                 loadSpriteDimensions();
+                initializeHotkeys();
 
                 thingTypeEditor.settings = _settings;
                 thingTypeEditor.bindableThingType.settings = _settings;
@@ -1941,18 +2297,6 @@ THE SOFTWARE.
                 var things:Vector.<uint> = thingList.selectedIds;
                 if (things && things.length > 0) {
                     duplicateThings(things, currentCategory);
-                }
-            }
-
-            override protected function keyDownHandler(event:KeyboardEvent):void
-            {
-                super.keyDownHandler(event);
-
-                switch(event.keyCode) {
-                    case Keyboard.S:
-                        // Add logic for saving and bypassing alert
-                        editThingHandler(null); // Pass null since it's not coming from a UI event
-                break;
                 }
             }
 
